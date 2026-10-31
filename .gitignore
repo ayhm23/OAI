@@ -1,0 +1,4 @@
+# host-specific facts about other users of the shared lab PC
+CLAUDE.local.md
+__pycache__/
+*.log

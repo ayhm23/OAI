@@ -1,0 +1,205 @@
+diff -ru -x docker-compose-positioning.yaml /home/oai/oai-lab/src/openairinterface5g/doc/tutorial_resources/oai-cn5g/conf/config.yaml cn5g/conf/config.yaml
+--- /home/oai/oai-lab/src/openairinterface5g/doc/tutorial_resources/oai-cn5g/conf/config.yaml	2026-10-28 23:09:41.196370036 +0530
++++ cn5g/conf/config.yaml	2026-10-28 23:30:11.005443161 +0530
+@@ -103,6 +103,8 @@
+ snssais:
+   - &embb_slice
+     sst: 1
++  - &urllc_slice
++    sst: 2
+ 
+ ############## NF-specific configuration
+ amf:
+@@ -129,6 +131,7 @@
+       tac: 0x0001
+       nssai:
+         - *embb_slice
++        - *urllc_slice
+   supported_integrity_algorithms:
+     - "NIA1"
+     - "NIA2"
+@@ -153,7 +156,7 @@
+     secondary_ipv4: "8.8.8.8"
+     secondary_ipv6: "2001:4860:4860::8888"
+   ims:
+-    pcscf_ipv4: "192.168.70.139"
++    pcscf_ipv4: "192.168.77.139"
+     pcscf_ipv6: "fe80::7915:f408:1787:db8b"
+   # the DNN you configure here should be configured in "dnns"
+   # follows the SmfInfo datatype from 3GPP TS 29.510
+@@ -165,6 +168,9 @@
+           - dnn: "openairinterface"
+           - dnn: "ims"
+           - dnn: "default"
++      - sNssai: *urllc_slice
++        dnnSmfInfoList:
++          - dnn: "urllc"
+   local_subscription_infos:
+     - single_nssai: *embb_slice
+       dnn: "oai"
+@@ -190,6 +196,12 @@
+         5qi: 9
+         session_ambr_ul: "10Gbps"
+         session_ambr_dl: "10Gbps"
++    - single_nssai: *urllc_slice
++      dnn: "urllc"
++      qos_profile:
++        5qi: 7
++        session_ambr_ul: "50Mbps"
++        session_ambr_dl: "50Mbps"
+ 
+ upf:
+   support_features:
+@@ -206,6 +218,9 @@
+           - dnn: "openairinterface"
+           - dnn: "ims"
+           - dnn: "default"
++      - sNssai: *urllc_slice
++        dnnUpfInfoList:
++          - dnn: "urllc"
+ 
+ lmf:
+   http_threads_count: 8
+@@ -238,3 +253,6 @@
+     pdu_session_type: "IPV4V6"
+     ipv4_subnet: "10.0.255.0/24"
+     ipv6_prefix: "2001:1:2::/64"
++  - dnn: "urllc"
++    pdu_session_type: "IPV4"
++    ipv4_subnet: "10.0.2.0/24"
+diff -ru -x docker-compose-positioning.yaml /home/oai/oai-lab/src/openairinterface5g/doc/tutorial_resources/oai-cn5g/docker-compose.yaml cn5g/docker-compose.yaml
+--- /home/oai/oai-lab/src/openairinterface5g/doc/tutorial_resources/oai-cn5g/docker-compose.yaml	2026-10-28 23:09:41.197370031 +0530
++++ cn5g/docker-compose.yaml	2026-10-28 23:30:11.005443161 +0530
+@@ -1,6 +1,7 @@
++# patched by oai-lab-kit: project/network/bridge/subnet isolated
++name: oailab77-cn
+ services:
+     mysql:
+-        container_name: "mysql"
+         image: mysql:9.6
+         volumes:
+             - ./database/oai_db.sql:/docker-entrypoint-initdb.d/oai_db.sql
+@@ -18,10 +19,9 @@
+             retries: 10
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.131
++                ipv4_address: 192.168.77.131
+                 
+     ims:
+-        container_name: "ims"
+         image: oaisoftwarealliance/ims:latest
+         volumes:
+             - ./conf/sip.conf:/etc/asterisk/sip.conf
+@@ -33,9 +33,8 @@
+             retries: 10
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.139
++                ipv4_address: 192.168.77.139
+     oai-udr:
+-        container_name: "oai-udr"
+         image: oaisoftwarealliance/oai-udr:v2.2.1
+         expose:
+             - 80/tcp
+@@ -49,9 +48,8 @@
+             - oai-nrf
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.136
++                ipv4_address: 192.168.77.136
+     oai-udm:
+-        container_name: "oai-udm"
+         image: oaisoftwarealliance/oai-udm:v2.2.1
+         expose:
+             - 80/tcp
+@@ -64,9 +62,8 @@
+             - oai-udr
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.137
++                ipv4_address: 192.168.77.137
+     oai-ausf:
+-        container_name: "oai-ausf"
+         image: oaisoftwarealliance/oai-ausf:v2.2.1
+         expose:
+             - 80/tcp
+@@ -79,9 +76,8 @@
+             - oai-udm
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.138
++                ipv4_address: 192.168.77.138
+     oai-nrf:
+-        container_name: "oai-nrf"
+         image: oaisoftwarealliance/oai-nrf:v2.2.1
+         expose:
+             - 80/tcp
+@@ -92,9 +88,8 @@
+             - TZ=Europe/Paris
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.130
++                ipv4_address: 192.168.77.130
+     oai-amf:
+-        container_name: "oai-amf"
+         image: oaisoftwarealliance/oai-amf:v2.2.1
+         expose:
+             - 80/tcp
+@@ -110,9 +105,8 @@
+             - oai-ausf
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.132
++                ipv4_address: 192.168.77.132
+     oai-smf:
+-        container_name: "oai-smf"
+         image: oaisoftwarealliance/oai-smf:v2.2.1
+         expose:
+             - 80/tcp
+@@ -127,9 +121,8 @@
+             - oai-amf
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.133
++                ipv4_address: 192.168.77.133
+     oai-upf:
+-        container_name: "oai-upf"
+         image: oaisoftwarealliance/oai-upf:v2.2.1
+         expose:
+             - 2152/udp
+@@ -149,14 +142,13 @@
+         privileged: true
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.134
++                ipv4_address: 192.168.77.134
+     oai-ext-dn:
+         privileged: true
+         init: true
+-        container_name: oai-ext-dn
+         image: oaisoftwarealliance/trf-gen-cn5g:latest
+         entrypoint: /bin/bash -c \
+-              "ip route add 10.0.0.0/16 via 192.168.70.134 dev eth0; ip route; iperf3 -s -D; sleep infinity"
++              "ip route add 10.0.0.0/16 via 192.168.77.134 dev eth0; ip route; iperf3 -s -D; sleep infinity"
+         command: ["/bin/bash", "-c", "trap : SIGTERM SIGINT; sleep infinity & wait"]
+         healthcheck:
+             test: /bin/bash -c "ip r | grep 10.0.0"
+@@ -165,13 +157,13 @@
+             retries: 10
+         networks:
+             public_net:
+-                ipv4_address: 192.168.70.135
++                ipv4_address: 192.168.77.135
+ networks:
+     public_net:
+         driver: bridge
+-        name: oai-cn5g-public-net
++        name: oailab77-net
+         ipam:
+             config:
+-                - subnet: 192.168.70.128/26
++                - subnet: 192.168.77.128/26
+         driver_opts:
+-            com.docker.network.bridge.name: "oai-cn5g"
++            com.docker.network.bridge.name: "br-oailab77"
