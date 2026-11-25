@@ -314,3 +314,36 @@ infos, the YAML-anchor config style, and one config file for every NF.
   Per openair2/E2AP/README.md, KPM indications need the UE to support slice (1, 0xffffff) — UEs here have it.
 - **Slice-aware MAC scheduling**: RAN slice partitioning isn't in OAI RAN (FlexRIC SLICE SM unsupported), so slicing
   here is core/session-level only; the gNB already announces both S-NSSAIs, which is the hook a slice-aware scheduler needs.
+
+## Multi-UE experiment: 5 and 10 UEs (2026-11-25)
+
+Kit changes: `MAX_UE=10` in `env.sh` (loops over UE slots), `ue_imsi` is now `00101%010d` (IMSI 10 would
+otherwise be 16 digits), `extend_db_ues.py` clones subscriber 4 into IMSIs 5..10 (static IP 10.0.0.<i+1>), `lab.sh iperf`
+takes a server port, `experiment.sh <N> [secs]` runs the test below (one iperf3 server per UE in my ext-dn, ports 5201+).
+Per slice: (1) RTT of UE 1 alone, (2) UE 1 alone DL/UL, (3) RTT with N UEs pinging at once, (4) DL/UL with N UEs
+running iperf3 at once. Raw output: `run/tests/exp-5ue/`, `run/tests/exp-10ue/` (`summary.txt` in each).
+
+| | 1 UE alone (earlier) | 5 UEs, 8 CPUs | 10 UEs, 12 CPUs |
+|---|---|---|---|
+| eMBB DL aggregate / per UE | ~100 Mbit/s | 106 / ~21 | 57 / ~5.7 |
+| eMBB UL aggregate / per UE | ~46 | 42 / ~8.4 | 21 / ~2.1 |
+| URLLC DL aggregate (tc limit 50) | 47 | 46.5 / ~9.2 | 42 / ~4.2 |
+| URLLC UL aggregate / per UE | 46 | 44 / ~8.8 | 23 / ~2.3 |
+| RTT with all UEs pinging (avg) | 19-25 ms | 19-34 ms | 28-47 ms |
+
+Findings:
+- **Capacity is shared, not multiplied.** Equal channels give an almost equal split between UEs (OAI proportional-fair
+  MAC scheduler, same 3GPP behaviour as any PF scheduler). Cell total with 5 UEs: ~105 Mbit/s DL, ~42 UL.
+- **The slice-2 limit is per slice, not per UE**: the `tc` rule matches 10.0.2.0/24, so N UEs share 50 Mbit/s.
+  The session AMBR in 3GPP is per UE; this limit is a testbed substitute (see REPORT-2026-11-25.md).
+- **10 UEs got worse, not better, in total**: DL aggregate halved although the CPU mask grew from 8 to 12 threads.
+  Host was 84 % idle during the run, the gNB process used ~150 % (one busy thread at ~96 % was already seen with
+  5 UEs). Probable cause (not proven): the rfsimulator gNB serves every UE connection in real time in its own
+  threads, so cost grows with the number of UEs and the gNB/rfsim loop, not the host CPU count, is the limit.
+  To check: rerun 10 UEs with `CPUS` unchanged, or watch per-thread CPU of `nr-softmodem` (`top -H`).
+- **Latency grows with attached UEs**: idle RTT of UE 1 was ~5 ms with 1-2 UEs, 19-25 ms with 5, 34-49 ms with 10.
+  Even idle UEs cost (each exchanges samples with the gNB every slot).
+- **Uplink with 10 UEs attached is unreliable**: UE 1 alone UL gave "0.0" twice (iperf3 control connection lost:
+  `Bad file descriptor`, `Broken pipe`); rerun gave 17.5 Mbit/s on eMBB and failed again on URLLC. The "UL alone" cells
+  for 10 UEs are therefore not valid; the all-UEs UL figures completed.
+- Not a correct comparison on one point: the 5-UE run used `CPUS=12-15,28-31`, the 10-UE run `CPUS=10-15,26-31`.

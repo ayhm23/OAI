@@ -161,7 +161,7 @@ ue_ns_up() {
 ue_ns_down() {  # root: kill everything in my netns, then delete it (veth pair goes with it)
   need_root ue-ns-down "${1:-all}"
   local i ns
-  for i in $( [ "${1:-all}" = all ] && echo 1 2 3 4 || echo "$1" ); do
+  for i in $( [ "${1:-all}" = all ] && seq 1 "$MAX_UE" || echo "$1" ); do
     ns=$(ue_ns "$i")
     ip netns list | grep -qw "^$ns" || continue
     ip netns pids "$ns" | xargs -r kill 2>/dev/null || true
@@ -211,7 +211,7 @@ ue_stop() {
 
 ue_ip() {
   local i
-  for i in ${1:-1 2 3 4}; do
+  for i in ${1:-$(seq 1 "$MAX_UE")}; do
     ut "$i" has-session 2>/dev/null || continue
     echo "== UE $i ($(ue_ns "$i"))"
     in_ns "$i" "ip -br -4 addr; ip rule | grep -v -e 'lookup local' -e 'lookup main' -e 'lookup default'; true"
@@ -226,12 +226,12 @@ ping_() {  # ping <i> <embb|urllc> [count] [payload bytes, with DF set]
   in_ns "$i" "ping -c ${3:-10} -i 0.2 $sz -I $ifc $EXTDN_IP"
 }
 
-iperf_() {  # iperf <i> <embb|urllc> [seconds] [dl|ul] -- bound to the slice IP; dl = -R (default)
+iperf_() {  # iperf <i> <embb|urllc> [seconds] [dl|ul] [port] -- bound to the slice IP; dl = -R (default)
   local i=${1:?usage: iperf <i> <embb|urllc> [seconds] [dl|ul]} ifc dir=${4:-dl} rev=-R
   ifc=$(slice_if "${2:?slice}")
   case $dir in dl) rev=-R ;; ul) rev= ;; *) echo "direction must be dl or ul" >&2; return 1 ;; esac
   in_ns "$i" "ip=\$(ip -4 -o addr show dev $ifc | awk '{print \$4}' | cut -d/ -f1); \
-echo \"bind \$ip ($ifc) $dir\"; timeout $(( ${3:-10} + 15 )) iperf3 -c $EXTDN_IP -B \$ip $rev -t ${3:-10} -f m"
+echo \"bind \$ip ($ifc) $dir\"; timeout $(( ${3:-10} + 15 )) iperf3 -c $EXTDN_IP -p ${5:-5201} -B \$ip $rev -t ${3:-10} -f m"
 }
 
 # ---------------------------------------------------------------------- status
@@ -256,7 +256,7 @@ status() {
 
 stop() {  # RAN only (UEs, then gNB); core keeps running
   local i
-  for i in 1 2 3 4; do stop_pids $(ran_pids "ue$i.conf"); done
+  for i in $(seq 1 "$MAX_UE"); do stop_pids $(ran_pids "ue$i.conf"); done
   gnb_stop
   echo "RAN stopped"
 }
@@ -289,7 +289,7 @@ usage: $0 <command>
   ue <i> | ue-stop <i>   start/stop UE i inside its netns (log \$LAB/run/ue<i>/ue.log)
   ue-ip [i]              interfaces and per-slice ip rules inside the UE netns
   ping <i> <embb|urllc> [n] [size]      ping ext-dn ($EXTDN_IP) through a slice
-  iperf <i> <embb|urllc> [secs] [dl|ul]  iperf3 via ext-dn, bound to the slice IP (default dl)
+  iperf <i> <embb|urllc> [secs] [dl|ul] [port]  iperf3 via ext-dn, bound to the slice IP (default dl)
   status                 what of mine is running
   stop                   stop UEs and gNB (core stays up)
   down                   stop everything of mine (netns removal: sudo ... ue-ns-down all)

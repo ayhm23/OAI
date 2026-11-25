@@ -1,0 +1,22 @@
+bind 10.0.0.4 (ue-embb) dl
+Connecting to host 192.168.77.195, port 5203
+Reverse mode, remote host 192.168.77.195 is sending
+[  5] local 10.0.0.4 port 42471 connected to 192.168.77.195 port 5203
+[ ID] Interval           Transfer     Bitrate
+[  5]   0.00-1.33   sec   256 KBytes  1.57 Mbits/sec                  
+[  5]   1.33-2.02   sec   256 KBytes  3.03 Mbits/sec                  
+[  5]   2.02-3.18   sec   640 KBytes  4.53 Mbits/sec                  
+[  5]   3.18-4.11   sec   768 KBytes  6.76 Mbits/sec                  
+[  5]   4.11-5.02   sec   768 KBytes  6.97 Mbits/sec                  
+[  5]   5.02-6.05   sec   896 KBytes  7.08 Mbits/sec                  
+[  5]   6.05-7.10   sec   896 KBytes  7.02 Mbits/sec                  
+[  5]   7.10-8.13   sec   896 KBytes  7.13 Mbits/sec                  
+[  5]   8.13-9.01   sec   768 KBytes  7.16 Mbits/sec                  
+[  5]   9.01-10.04  sec   896 KBytes  7.11 Mbits/sec                  
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-10.27  sec  9.14 MBytes  7.47 Mbits/sec    0             sender
+[  5]   0.00-10.04  sec  6.88 MBytes  5.75 Mbits/sec                  receiver
+
+iperf Done.
+rc=0

@@ -107,7 +107,7 @@ case "${1:-}" in
   cn)  check_cn ;;
   gnb) check_gnb ;;
   ue)  [ -n "${2:-}" ] || { echo "usage: $0 ue <i>" >&2; exit 2; }; check_ue "$2" ;;
-  all) check_cn; check_gnb; for i in 1 2 3 4; do check_ue "$i"; done ;;
+  all) check_cn; check_gnb; for i in $(seq 1 "$MAX_UE"); do check_ue "$i"; done ;;
   *)   echo "usage: $0 cn | gnb | ue <i> | all" >&2; exit 2 ;;
 esac
 [ $fail = 0 ] && echo "RESULT: no conflicts" || echo "RESULT: CONFLICTS FOUND, do not proceed"

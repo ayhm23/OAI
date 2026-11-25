@@ -116,7 +116,7 @@ conf() {
   grep -q "IQfile = \"$LAB/run/gnb/" "$dst" &&
   ! grep -qE '192\.168\.70\.|/tmp/' "$dst" || { echo "conf: gnb.conf edit failed, upstream changed?" >&2; exit 1; }
   echo "conf: $dst"
-  for i in 1 2 3 4; do
+  for i in $(seq 1 "$MAX_UE"); do
     cat > "$LAB/conf/ue$i.conf" <<EOF
 # oai-lab-kit UE $i: one PDU session per slice (see doc/runmodem-nrue.md)
 uicc0 = {
@@ -130,7 +130,7 @@ uicc0 = {
 };
 EOF
   done
-  echo "conf: $LAB/conf/ue{1..4}.conf"
+  echo "conf: $LAB/conf/ue{1..$MAX_UE}.conf"
 }
 
 # Copy the small, shareable results of $LAB into $KIT/lab/ for git: notes, configs,

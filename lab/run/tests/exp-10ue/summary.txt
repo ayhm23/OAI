@@ -1,0 +1,44 @@
+=== slice embb
+-- 1. idle RTT, UE 1 alone
+rtt min/avg/max/mdev = 13.705/48.845/137.060/23.534 ms
+-- 2. throughput, UE 1 alone (DL, UL)
+dl: 47.1 Mbit/s
+ul: 0.0 Mbit/s
+-- 3. all 10 UEs at once: RTT
+UE1  9.630/32.256/39.826/7.817 ms
+UE2  23.134/44.655/53.771/8.417 ms
+UE3  19.328/45.015/66.598/9.594 ms
+UE4  31.541/43.205/81.208/10.342 ms
+UE5  21.222/38.361/52.192/7.053 ms
+UE6  14.125/28.515/40.765/5.810 ms
+UE7  28.462/38.993/57.050/7.856 ms
+UE8  10.619/35.502/52.469/9.734 ms
+UE9  17.926/28.562/38.167/4.104 ms
+UE10  27.453/38.425/51.879/7.073 ms
+-- 4. all 10 UEs at once: throughput
+dl per UE (Mbit/s): 6.4 5.6 5.8 5.6 5.4 5.8 5.7 5.7 5.7 5.6 
+dl aggregate: 57.3 Mbit/s
+ul per UE (Mbit/s): 2.1 2.1 2.1 2.1 2.1 2.1 2.1 2.1 2.1 2.1 
+ul aggregate: 21.1 Mbit/s
+=== slice urllc
+-- 1. idle RTT, UE 1 alone
+rtt min/avg/max/mdev = 10.969/34.176/40.975/8.084 ms
+-- 2. throughput, UE 1 alone (DL, UL)
+dl: 44.2 Mbit/s
+ul: 0.0 Mbit/s
+-- 3. all 10 UEs at once: RTT
+UE1  7.523/29.719/38.600/10.293 ms
+UE2  28.589/46.596/53.240/5.271 ms
+UE3  15.560/40.860/51.612/10.250 ms
+UE4  23.460/41.196/50.968/6.499 ms
+UE5  31.020/39.302/50.474/5.998 ms
+UE6  15.431/30.582/37.914/5.539 ms
+UE7  27.999/37.494/52.291/6.717 ms
+UE8  25.118/29.463/32.380/2.010 ms
+UE9  8.310/27.683/32.798/5.033 ms
+UE10  31.577/39.095/49.478/5.260 ms
+-- 4. all 10 UEs at once: throughput
+dl per UE (Mbit/s): 4.7 4.1 4.1 4.2 4.1 4.2 4.2 4.2 4.2 4.2 
+dl aggregate: 42.3 Mbit/s
+ul per UE (Mbit/s): 2.3 2.3 2.3 2.3 2.3 2.3 2.3 2.3 2.3 2.3 
+ul aggregate: 23.1 Mbit/s

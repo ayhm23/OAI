@@ -1,0 +1,22 @@
+bind 10.0.2.5 (ue-urllc) dl
+Connecting to host 192.168.77.195, port 5203
+Reverse mode, remote host 192.168.77.195 is sending
+[  5] local 10.0.2.5 port 51663 connected to 192.168.77.195 port 5203
+[ ID] Interval           Transfer     Bitrate
+[  5]   0.00-1.05   sec   640 KBytes  4.97 Mbits/sec                  
+[  5]   1.05-2.01   sec  1.12 MBytes  9.91 Mbits/sec                  
+[  5]   2.01-3.10   sec  1.25 MBytes  9.56 Mbits/sec                  
+[  5]   3.10-4.09   sec  1.12 MBytes  9.56 Mbits/sec                  
+[  5]   4.09-5.08   sec  1.12 MBytes  9.56 Mbits/sec                  
+[  5]   5.08-6.06   sec  1.12 MBytes  9.57 Mbits/sec                  
+[  5]   6.06-7.05   sec  1.12 MBytes  9.55 Mbits/sec                  
+[  5]   7.05-8.04   sec  1.12 MBytes  9.57 Mbits/sec                  
+[  5]   8.04-9.02   sec  1.12 MBytes  9.57 Mbits/sec                  
+[  5]   9.02-10.01  sec  1.12 MBytes  9.55 Mbits/sec                  
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-10.03  sec  11.2 MBytes  9.33 Mbits/sec    3             sender
+[  5]   0.00-10.01  sec  10.9 MBytes  9.11 Mbits/sec                  receiver
+
+iperf Done.
+rc=0

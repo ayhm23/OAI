@@ -1,0 +1,21 @@
+bind 10.0.0.5 (ue-embb) ul
+Connecting to host 192.168.77.195, port 5203
+[  5] local 10.0.0.5 port 41191 connected to 192.168.77.195 port 5203
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec  1.59 MBytes  13.3 Mbits/sec    0    124 KBytes       
+[  5]   1.00-2.00   sec  1.30 MBytes  10.9 Mbits/sec    0    177 KBytes       
+[  5]   2.00-3.00   sec  1.30 MBytes  10.9 Mbits/sec    0    228 KBytes       
+[  5]   3.00-4.00   sec  1.06 MBytes  8.86 Mbits/sec    0    280 KBytes       
+[  5]   4.00-5.00   sec  1.24 MBytes  10.4 Mbits/sec    0    332 KBytes       
+[  5]   5.00-6.00   sec  1.43 MBytes  12.0 Mbits/sec    0    385 KBytes       
+[  5]   6.00-7.00   sec   827 KBytes  6.77 Mbits/sec    0    437 KBytes       
+[  5]   7.00-8.00   sec  1.80 MBytes  15.1 Mbits/sec    0    488 KBytes       
+[  5]   8.00-9.00   sec  1.06 MBytes  8.86 Mbits/sec    0    540 KBytes       
+[  5]   9.00-10.00  sec  1.12 MBytes  9.38 Mbits/sec    0    592 KBytes       
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-10.00  sec  12.7 MBytes  10.7 Mbits/sec    0             sender
+[  5]   0.00-10.58  sec  10.7 MBytes  8.45 Mbits/sec                  receiver
+
+iperf Done.
+rc=0

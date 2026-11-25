@@ -8,8 +8,9 @@ export LAB_USER="${SUDO_USER:-$(id -un)}"
 export LAB="${LAB:-$(getent passwd "$LAB_USER" | cut -d: -f6)/oai-lab}"  # root of everything I create
 export SUB=77                          # subnet octet: core 192.168.$SUB.128/26, UE links 10.$SUB.i.0/24
 export RFPORT=4077                     # rfsimulator server port (upstream default 4043 left to others)
-export CPUS=12-15,28-31                # 4 physical cores + SMT siblings (same CCD/L3), gNB/UE/build only here
+export CPUS=10-15,26-31                # 6 physical cores + SMT siblings (same CCD/L3), gNB/UE/build only here
 export JOBS=8                          # max compile jobs
+export MAX_UE=10                       # UE slots (netns/veth/conf/subscribers) the kit knows about
 
 # Set explicitly (not derived from $USER: "oai" is too generic on this host)
 export TAG=oailab77
@@ -37,13 +38,13 @@ export SLICE2_POOL=10.0.2.0/24         # UE pool of slice 2 (urllc), see patch_c
 export SLICE2_RATE=50mbit              # session AMBR of slice 2, enforced with tc in ext-dn (UPF does not police)
 export EXTDN_IP=192.168.$SUB.195       # ext-dn lives on the N6 network only
 
-# Per-UE names (i = 1..4); all <= 15 chars
+# Per-UE names (i = 1..$MAX_UE); all <= 15 chars
 ue_ns()      { echo "$TAG-ue$1"; }          # netns
 ue_veth_h()  { echo "v$TAG""h$1"; }         # host end, e.g. voailab77h1
 ue_veth_n()  { echo "v$TAG""n$1"; }         # netns end
 ue_host_ip() { echo "10.$SUB.$1.1"; }
 ue_ns_ip()   { echo "10.$SUB.$1.2"; }
-ue_imsi()    { printf '00101000000000%d' "$1"; }
+ue_imsi()    { printf '00101%010d' "$1"; }
 
 # docker: use group membership directly if this shell has it, else via sg
 dk() {
@@ -51,7 +52,7 @@ dk() {
   else sg docker -c "$(printf '%q ' docker "$@")"; fi
 }
 
-for _n in "$BRIDGE" "$(ue_veth_h 4)" "$(ue_veth_n 4)" "$(ue_ns 4)"; do
+for _n in "$BRIDGE" "$(ue_veth_h $MAX_UE)" "$(ue_veth_n $MAX_UE)" "$(ue_ns $MAX_UE)"; do
   [ ${#_n} -le 15 ] || echo "env.sh: WARNING name '$_n' is longer than 15 chars" >&2
 done
 unset _n
