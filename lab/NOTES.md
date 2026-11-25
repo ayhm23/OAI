@@ -123,6 +123,160 @@ sees the UE source IPs. Non-3GPP, contained in my container.
 **URLLC latency (~3-7 ms RTT) is expected**: eMBB radio config (TDD period 5 ms, 30 kHz SCS) and no RAN
 slicing in OAI; the 2026-10-28 "URLLC is faster" averages were warm-up noise (minimums both ~5 ms).
 
+## Link capacity: radio, gNB, UE, core
+
+**One cell, one radio link.** gNB and UE share the same carrier; there is no separate "UE capacity" and no
+per-slice radio capacity (OAI has no RAN slicing). Both UEs/slices compete for the same PRBs and slots.
+
+| Item | Value | Where set / 3GPP or OAI-specific |
+|---|---|---|
+| Band / carrier | n78, SSB ARFCN 641280, point A 640008 → centre ≈ 3619.2 MHz (`-C 3619200000` on the UE) | `gnb.conf`, UE command line (3GPP bands, OAI-specific CLI) |
+| Numerology | µ=1: 30 kHz SCS, 0.5 ms slots, 20 slots/frame | `*_subcarrierSpacing = 1` |
+| Bandwidth | 106 PRB × 12 sc × 30 kHz ≈ 38.2 MHz occupied (a "40 MHz" channel); UE told with `-r 106` | `dl/ul_carrierBandwidth = 106` |
+| Antennas / layers | 1T1R, 1 MIMO layer | `RUs: nb_tx = 1, nb_rx = 1` |
+| TDD pattern | 5 ms period: 7 DL slots + 1 special (6 DL, 4 UL symbols, 4 flexible) + 2 UL slots | `dl_UL_TransmissionPeriodicity = 6`, `nrofDownlinkSlots = 7`, `nrofUplinkSlots = 2`, symbols 6/4 |
+| Time share | DL ≈ 74 % (7 + 6/14 of 10 slots), UL ≈ 23 % (2 + 4/14) | derived |
+| Modulation | MCS table 0 (up to 64QAM), OAI default max MCS 28 DL | OAI MAC defaults |
+| Channel | AWGN, no fading (RF-sim `modelname = "AWGN"`); UE sees SNR ≈ 17–46 dB, CQI 15 | `rfsimulator` block |
+| CPUs | gNB and UE pinned to `12-15,28-31` (`taskset`) | `env.sh` `CPUS` |
+
+**Rough theoretical peak (my estimate, not measured):** about 100–120 Mbit/s downlink and about 35 Mbit/s
+uplink for 106 PRB, 1 layer, 64QAM at top MCS, after DMRS/PDCCH/CSI-RS overhead. UL is lower because of
+the 2-slot UL window and a lower UL MCS cap.
+
+**Measured, and why it differs.** iperf3 counts *wall-clock* seconds, but RF-sim has no real-time clock:
+simulated air time advances as fast as the CPUs process slots. Measured by counting the gNB's
+`Frame.Slot` log lines (one per 128 frames = 1.28 s of air time) against wall time, while iperf ran
+(`embb`, 12 s, approximate wall time):
+
+| Direction | iperf (wall clock) | Simulation speed | Real-time-equivalent capacity |
+|---|---|---|---|
+| Downlink | 333 Mbit/s | ≈ 4.1× real time | ≈ 82 Mbit/s |
+| Uplink | 160 Mbit/s | ≈ 4.8× real time | ≈ 33 Mbit/s |
+| Idle | n/a | ≈ 5.9× real time | n/a |
+
+So the real-time-equivalent figures agree with the theoretical bound (DL a bit under it, UL close to it),
+and the headline 330 / 160 Mbit/s are **CPU-bound simulation rates, not radio capacity**. More cores in `CPUS`
+raise them; a second UE roughly halves each UE's share (226–230 Mbit/s each) because the same slots and
+the same CPUs are shared. nrUE is the heaviest process (~150–180 % CPU each).
+
+**Where a rate limit can live (and what is actually in force):**
+
+| Layer | Mechanism | State in this lab |
+|---|---|---|
+| Radio (gNB/UE) | PRBs, TDD pattern, MCS, 1 layer, UE-AMBR | physical limit above; OAI gNB does not enforce UE-AMBR or per-slice PRBs |
+| Core, 3GPP | session AMBR via SMF → UPF QER | signalled to UE (NAS), QER sent with `enable_qers: yes`; simple-switch UPF does not police; eBPF UPF does but misbehaves here |
+| Core, this lab | `tc` in my ext-dn (`./lab.sh slice-limit`, `SLICE2_RATE`) | slice 2 (10.0.2.0/24) held at 50 Mbit/s DL/UL: measured 47.9 / 45.9 Mbit/s; slice 1 unrestricted: 338 / 159 Mbit/s |
+| Transport | N3 MTU 1600 in compose (GTP-U adds ~44 B to a 1500 B packet) | needed by the eBPF UPF (cannot fragment); the simple-switch UPF also works with 1500 |
+
+Latency floor from the same config: one TDD period (5 ms) for an uplink round trip; see
+`REPORT-2026-11-25.md`.
+
+## Slice parameter reference — what each config file sets
+
+A slice is identified end to end by **S-NSSAI** (SST, optional SD; here SST only → UE requests `sst.ffffff`,
+"no SD") plus a **DNN**. The same two values must be consistent in all three files below:
+
+| | Slice 1 — eMBB | Slice 2 — URLLC |
+|---|---|---|
+| S-NSSAI | SST 1 | SST 2 |
+| DNN | `oai` | `urllc` |
+| UE IP pool (UPF) | 10.0.0.0/24 | 10.0.2.0/24 |
+| 5QI / default QoS flow | 9 (non-GBR) | 7 (non-GBR) |
+| Session AMBR (signalled) | 10 Gbps UL/DL | 50 Mbps UL/DL |
+| PDU session id on the UE | 1 | 2 |
+| UE interface / routing table | `ue-embb` / 10001 | `ue-urllc` / 10002 |
+| gNB DRB | DRB 1 (QFI 1, 5QI 9) | DRB 2 (QFI 1, 5QI 7) |
+| UPF `upf_info` | `*embb_slice` + dnn `oai`, … | `*urllc_slice` + dnn `urllc` |
+| Real limit in force | none | `tc` 50 Mbit/s in ext-dn |
+
+### 1. `~/oai-lab/conf/gnb.conf` — the RAN (derived from `gnb.sa.band78.fr1.106PRB.usrpb210.conf`)
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| `gNB_ID`, `gNB_name`, `nr_cellid` | 0xe00, `gNB-OAI`, 12345678 | identity sent in NG Setup |
+| `tracking_area_code` | 1 | must match the AMF `plmn_support_list` `tac: 0x0001` |
+| `plmn_list` | MCC 001, MNC 01 (2 digits) | PLMN broadcast in SIB1; must match AMF and the UE IMSI prefix 00101 |
+| **`snssaiList`** | `({ sst = 1; }, { sst = 2; })` | **the slices this gNB supports**: announced in NG Setup, the AMF answers with them (`Supported slice … SST=0x01`, `0x02`); a slice missing here makes PDU session setup fail. Only this list is slice-aware on the RAN side; OAI MAC does not partition resources by slice |
+| `physCellId`, `absoluteFrequencySSB`, `dl_absoluteFrequencyPointA`, `dl/ul_frequencyBand` | 0, 641280, 640008, 78 | cell identity and frequency raster (≈ 3619.2 MHz SSB) |
+| `dl/ul_subcarrierSpacing`, `dl/ul_carrierBandwidth`, `initial*BWP*` | 1 (30 kHz), 106 PRB | numerology and bandwidth: the capacity table above |
+| `prach_*`, `preamble*`, `ra_ContentionResolutionTimer`, `msg1_*` | tutorial defaults | RACH (4-step CBRA) tuning; works as shipped |
+| `ssb_periodicityServingCell`, `ssb_PositionsInBurst_Bitmap`, `ssPBCH_BlockPower` | 2 (20 ms), 1, −25 | SSB timing and power |
+| `dl_UL_TransmissionPeriodicity`, `nrofDownlink/UplinkSlots/Symbols` | 6, 7, 6, 2, 4 | TDD frame structure → latency floor and DL/UL split |
+| `do_CSIRS`, `do_SRS` | 1, `periodic` | CSI-RS and SRS on: DL link adaptation, UL channel sounding |
+| `amf_ip_address` | 192.168.77.132 | AMF (N2/NGAP, SCTP 38412) in my subnet |
+| `GNB_IPV4_ADDRESS_FOR_NG_AMF`, `…_FOR_NGU`, `GNB_PORT_FOR_NGU` | 192.168.77.129/26 (both), 2152 | gNB's own N2 and N3 (GTP-U) addresses = host side of `br-oailab77` |
+| `MACRLCs`: `pusch_TargetSNRx10`, `pucch_TargetSNRx10` | 150, 200 | UL power-control targets (15 dB / 20 dB) |
+| `L1s`: `prach_dtx_threshold`, `pucch0_dtx_threshold` | 120, 100 | detection thresholds |
+| `RUs`: `nb_tx/nb_rx`, `att_tx/att_rx`, `max_rxgain`, `bands` | 1/1, 12/12, 114, [78] | 1T1R and RF gains; in RF-sim these only set signal levels |
+| `rfsimulator`: `serveraddr = "server"`, `serverport = 4077`, `modelname = "AWGN"` | | gNB is the rfsim *server*; port 4077 is mine (upstream 4043 left free) |
+| `security` | ciphering `nea0`, integrity `nia2`, `nia0` | AS algorithms the gNB prefers; DRB ciphering "yes", DRB integrity "no" |
+| `log_config` | `ngap`/`f1ap` debug, rest info | NG setup and PDU session handling are visible in `gnb.log` |
+
+Launch (`run/gnb/run.sh`): `taskset -c 12-15,28-31 nr-softmodem -O conf/gnb.conf --gNBs.[0].min_rxtxtime 6
+--rfsim --rfsimulator.[0].serveraddr server --rfsimulator.[0].serverport 4077`, cwd `$LAB/run/gnb` so the
+`nr*_stats.log` files land there. `--gNBs.[0].min_rxtxtime 6` is an OAI gNB option (the minimum number of slots between a reception and the
+matching transmission, i.e. processing time given to the UE); it is the value OAI's own tutorials use with RF-sim,
+I did not tune it.
+
+### 2. `~/oai-lab/conf/ue1.conf` … `ue4.conf` — the UE (identical except IMSI)
+
+```
+uicc0 = {
+  imsi = "00101000000000<i>";           # 001 01 + MSIN: PLMN and subscriber
+  key  = "fec86ba6eb707ed08905757b1bb44b8f";   # K (tutorial test value, same in core DB)
+  opc  = "C42449363BBAD02B66D16BC975D77CC1";   # OPc
+  pdu_sessions = (
+    { id = 1; dnn = "oai";   nssai_sst = 1; ifname = "ue-embb";  },
+    { id = 2; dnn = "urllc"; nssai_sst = 2; ifname = "ue-urllc"; }
+  );
+};
+```
+- `imsi`, `key`, `opc`: SIM identity for 5G-AKA; must match the subscriber row in the core database
+  (`oai_db.sql`, all four IMSIs 001010000000001…4 use the same tutorial K/OPc). Wrong key → authentication failure.
+- `pdu_sessions` (an OAI-specific list; upstream's default is a single session): the UE sends **one PDU Session
+  Establishment Request per entry** after registration. `id` is the PDU session ID, `dnn` and `nssai_sst`
+  are what the SMF/AMF use to pick the slice and the pool, `ifname` is the Linux TUN device the UE creates
+  for it (`ue-embb`, `ue-urllc`). OAI then adds `ip rule from/to <ip> lookup 1000N` + a default route
+  per interface so traffic bound to a slice IP leaves through that slice's TUN.
+- Not in the file, but set on the command line (`run/ue<i>/run.sh`): `-r 106 --numerology 1 --band 78
+  -C 3619200000` (must equal the gNB cell) and `--rfsimulator.[0].serveraddr 10.77.<i>.1 --rfsimulator.[0].serverport 4077`
+  (the UE connects to the gNB through its own veth pair, host side 10.77.<i>.1). The UE runs inside netns
+  `oailab77-ue<i>`, pinned to the same `CPUS`.
+- Note: the UE requests `NSSAI sst.ffffff` ("no SD"); the gNB list and the core use SST only, so they match.
+
+### 3. `~/oai-lab/cn5g/conf/config.yaml` — the core (one file for all NFs; slice-relevant parts)
+
+Edited by exact-text anchors in `patch_cn5g_slices.py`; a YAML anchor `&urllc_slice` is defined next to
+`&embb_slice` under `snssais:` and reused (`*urllc_slice`) everywhere below, so the slice is defined once.
+
+| Section | Slice-2 entry added | Role |
+|---|---|---|
+| `snssais` | `- &urllc_slice` / `sst: 2` | defines the S-NSSAI once |
+| `amf.plmn_support_list[0].nssai` | `- *urllc_slice` | **AMF admits slice 2** for PLMN 001/01, TAC 1 (registration/allowed NSSAI) and returns it in NG Setup |
+| `smf.smf_info.sNssaiSmfInfoList` | `sNssai: *urllc_slice` + `dnn: "urllc"` | SMF advertises which slice/DNN it serves to the NRF (3GPP TS 29.510 SmfInfo); the AMF discovers the SMF with it (`enable_smf_selection: yes`) |
+| `smf.local_subscription_infos` | `single_nssai: *urllc_slice`, `dnn: "urllc"`, `5qi: 7`, `session_ambr_ul/dl: "50Mbps"` | **QoS of the slice**: used instead of UDM data because `use_local_subscription_info: yes`. This is where 5QI and AMBR come from (no slice-2 row exists in `oai_db.sql`; that DB only holds SST 1 / SD FFFFFF) |
+| `smf.upfs` | `host: oai-upf` and a second entry `host: 192.168.77.134`, each `enable_qers: yes` | SMF per-UPF features; the NRF-discovered UPF is matched by IP, hence two entries |
+| `upf.upf_info.sNssaiUpfInfoList` | `sNssai: *urllc_slice` + `dnn: "urllc"` | UPF registers the slice with the NRF, so the SMF selects it for slice-2 sessions (extend later with a dedicated second UPF) |
+| `dnns` | `dnn: "urllc"`, `ipv4_subnet: "10.0.2.0/24"`, IPv4 | **UE IP pool per DNN**: slice 2 UEs get 10.0.2.x, slice 1 gets 10.0.0.x |
+| `upf.support_features` | `enable_bpf_datapath: no`, `enable_snat: no` | simple-switch UPF; no NAT so ext-dn sees real UE IPs (needed for the `tc` limit) |
+| `upf.remote_n6_gw`, `nfs.upf.n3/n6.interface_name` | 192.168.77.195, `eth0` / `eth1` | N6 on its own interface (only used by the eBPF UPF; harmless otherwise) |
+| `smf.ue_mtu`, `smf.ims.pcscf_ipv4` | 1500, 192.168.77.139 | MTU signalled to the UE; P-CSCF in my subnet (every `192.168.70.x` rewritten to `192.168.77.x`) |
+
+Flow for slice 2: UE requests PDU session (sst 2, `urllc`) → AMF checks `plmn_support_list` → NRF returns an
+SMF whose `smf_info` has that slice+DNN → SMF takes QoS from `local_subscription_infos`, picks the pool from
+`dnns`, asks the NRF for a UPF whose `upf_info` has that slice+DNN → N4 session (PFCP) to the UPF → N2 PDU
+Session Resource Setup to the gNB (5QI 7 → DRB 2). 3GPP: all of these steps; OAI-specific: local subscription
+infos, the YAML-anchor config style, and one config file for every NF.
+
+### Supporting files that must agree with the three above
+
+- `cn5g/docker-compose.yaml`: services, fixed addresses (AMF .132, UPF .134 N3 / .194 N6, ext-dn .195),
+  networks `oailab77-net` (192.168.77.128/26, bridge `br-oailab77`, MTU 1600) and `oailab77-n6`
+  (192.168.77.192/26, bridge `br-oailab77n6`); ext-dn route `10.0.0.0/16 via UPF`, TX offload off.
+- `cn5g/database/oai_db.sql`: subscribers (IMSI, K, OPc, SQN) and SST-1 session data used by the UDR/UDM.
+- `env.sh`: `SUB`, `RFPORT`, `CPUS`, `SLICE2_POOL`, `SLICE2_RATE`; everything above is derived from it.
+
 ## Problems hit and fixes
 
 1. **No docker/sudo/tmux** for `oai` at recon → admin added `oai` to `docker` and `sudo` groups and installed tmux.
