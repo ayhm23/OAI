@@ -49,7 +49,7 @@ cd ~/Desktop/oai-lab-kit
 ./setup.sh cn5g && ./setup.sh conf       # core copy+patch, RAN configs
 # run
 ./lab.sh cn-up                           # 1. core (conflict check, pull missing images, wait healthy)
-sudo ./lab.sh n6-gro                     #    ROOT, after every cn-up: GRO on the N6 veths (eBPF UPF XDP redirect)
+                                         #    (slice-limit is applied automatically; n6-gro only for the eBPF UPF)
 ./lab.sh gnb                             # 2. gNB (tmux oailab77-gnb)
 sg sudo -c "sudo ./lab.sh ue-ns 1"       # 3. ROOT once per UE: netns+veth+in-netns tmux
 ./lab.sh ue 1                            # 4. UE inside its netns
@@ -113,13 +113,12 @@ Raw outputs: `~/oai-lab/run/tests/`. The large max values are the first packet(s
 advances "air time" only as fast as all participants process slots, so throughput scales with
 CPU, not radio — the 2-UE drop is expected. More cores in CPUS is the lever if needed.
 
-**Session AMBR 50 Mbit/s on slice 2 is NOT enforced.** (Correction of the 2026-10-28 note: it was not
-a CN-version limit.) The SMF had `enable_qers: No` (set it, and a second `smf.upfs` entry keyed by the UPF's
-IP, because the NRF-discovered UPF is matched by IP). Even with QERs sent, the simple-switch UPF does not
-police (DL 328 / UL 159 Mbit/s); only the UPF's eBPF datapath implements QER enforcement. That datapath
-runs after: N3/N6 on separate interfaces, GRO on the N6 host veths, N3 MTU 1600, ext-dn TX offload off,
-`enable_qos: yes`, but then still misbehaves (both session classes at 10 Gbit/s, DL ~1.2 Mbit/s in the
-UPF's default class, UL ~50 Mbit/s on both slices). Full story and raw numbers: `REPORT-2026-11-25.md`.
+**Session AMBR 50 Mbit/s on slice 2 is enforced with `tc` in my ext-dn, not by the core.** The SMF signals
+it to the UE (and with `enable_qers: yes` sends QERs), but the simple-switch UPF does not police, and the
+eBPF datapath (the only one with QER code) misbehaves here (see `REPORT-2026-11-25.md`). So `./lab.sh
+slice-limit` (auto on `cn-up`, rate = `SLICE2_RATE` in `env.sh`) shapes DL and polices UL for 10.0.2.0/24
+inside ext-dn: URLLC 47.9 / 45.9 Mbit/s DL/UL, eMBB 338 / 159 unaffected. Needs `enable_snat: no` so ext-dn
+sees the UE source IPs. Non-3GPP, contained in my container.
 
 **URLLC latency (~3-7 ms RTT) is expected**: eMBB radio config (TDD period 5 ms, 30 kHz SCS) and no RAN
 slicing in OAI; the 2026-10-28 "URLLC is faster" averages were warm-up noise (minimums both ~5 ms).

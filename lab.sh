@@ -50,7 +50,31 @@ cn_up() {
   cn_pull
   mkdir -p "$LAB/run/cn"
   compose up -d --pull never --wait --wait-timeout 180
+  slice_limit apply
   compose ps
+}
+
+# Session AMBR of slice 2 is signalled to the UE but not policed by the simple-switch UPF, so shape it
+# with tc inside MY ext-dn container (non-3GPP, contained): DL = HTB class for dst $SLICE2_POOL on eth0
+# egress, UL = ingress policer for src $SLICE2_POOL. Slice 1 traffic is untouched.
+slice_limit() {  # slice-limit [apply|show|clear] [rate]
+  local act=${1:-apply} rate=${2:-$SLICE2_RATE}
+  case $act in
+    show)  compose exec -T oai-ext-dn sh -c "tc -s class show dev eth0; tc -s filter show dev eth0 parent ffff:; tc filter show dev eth0 parent 1:" ;;
+    clear) compose exec -T oai-ext-dn sh -c "tc qdisc del dev eth0 root 2>/dev/null; tc qdisc del dev eth0 ingress 2>/dev/null; true"; echo "slice-limit: cleared" ;;
+    apply) compose exec -T oai-ext-dn sh -c "
+      tc qdisc del dev eth0 root 2>/dev/null; tc qdisc del dev eth0 ingress 2>/dev/null
+      tc qdisc add dev eth0 root handle 1: htb default 10 &&
+      tc class add dev eth0 parent 1: classid 1:1 htb rate 10gbit &&
+      tc class add dev eth0 parent 1:1 classid 1:10 htb rate 10gbit &&
+      tc class add dev eth0 parent 1:1 classid 1:20 htb rate $rate ceil $rate burst 64k &&
+      tc qdisc add dev eth0 parent 1:20 handle 20: fq_codel &&
+      tc filter add dev eth0 parent 1: protocol ip prio 1 u32 match ip dst $SLICE2_POOL flowid 1:20 &&
+      tc qdisc add dev eth0 handle ffff: ingress &&
+      tc filter add dev eth0 parent ffff: protocol ip prio 1 u32 match ip src $SLICE2_POOL police rate $rate burst 200k drop" \
+      && echo "slice-limit: $SLICE2_POOL limited to $rate (DL shaped, UL policed) in ext-dn" ;;
+    *) echo "usage: slice-limit [apply|show|clear] [rate]" >&2; return 1 ;;
+  esac
 }
 
 cn_down() {
@@ -259,6 +283,7 @@ usage: $0 <command>
   cn-up | cn-down        start (conflict check, pull missing, wait healthy) / remove my core
   cn-logs [svc] [n]      last n lines (default 200) of core logs; cn-logs -f follows in tmux
   gnb | gnb-stop         start/stop the gNB (tmux $TAG-gnb, log \$LAB/run/gnb/gnb.log)
+  slice-limit [apply|show|clear] [rate]  tc limit for slice 2 inside my ext-dn (default $SLICE2_RATE)
   n6-gro                 ROOT: GRO on my N6 bridge's veths (needed after every cn-up with the eBPF UPF)
   ue-ns <i>              ROOT: netns $TAG-ue<i> + veth + in-netns tmux server
   ue <i> | ue-stop <i>   start/stop UE i inside its netns (log \$LAB/run/ue<i>/ue.log)
@@ -282,6 +307,7 @@ case "$cmd" in
   gnb-stop)   gnb_stop ;;
   ue-ns)      ue_ns_up "$@" ;;
   n6-gro)     n6_gro ;;
+  slice-limit) slice_limit "$@" ;;
   ue-ns-down) ue_ns_down "$@" ;;
   ue)         ue "$@" ;;
   ue-stop)    ue_stop "$@" ;;

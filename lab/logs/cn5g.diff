@@ -1,5 +1,5 @@
 --- /home/oai/oai-lab/src/openairinterface5g/doc/tutorial_resources/oai-cn5g/conf/config.yaml	2026-10-28 23:09:41.196370036 +0530
-+++ cn5g/conf/config.yaml	2026-11-25 10:34:26.904202189 +0530
++++ cn5g/conf/config.yaml	2026-11-25 11:08:04.507858865 +0530
 @@ -53,7 +53,7 @@
        interface_name: eth0
        port: 8805
@@ -56,7 +56,7 @@
    local_subscription_infos:
      - single_nssai: *embb_slice
        dnn: "oai"
-@@ -190,12 +201,19 @@
+@@ -190,12 +201,18 @@
          5qi: 9
          session_ambr_ul: "10Gbps"
          session_ambr_dl: "10Gbps"
@@ -69,16 +69,15 @@
  
  upf:
    support_features:
--    enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-+    enable_bpf_datapath: yes   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-+    enable_qos: yes            # eBPF datapath: enforce QERs (session AMBR)
-     enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
+     enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+-    enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
 -  remote_n6_gw: 127.0.0.1      # Dummy host since simple-switch does not use N6 GW
++    enable_snat: no            # If "on": Source natting is done for UE, DEFAULT= off
 +  remote_n6_gw: 192.168.77.195      # Dummy host since simple-switch does not use N6 GW
    smfs:
      - host: oai-smf            # To be used for PFCP association in case of no-NRF
    upf_info:
-@@ -206,6 +224,9 @@
+@@ -206,6 +223,9 @@
            - dnn: "openairinterface"
            - dnn: "ims"
            - dnn: "default"
@@ -88,7 +87,7 @@
  
  lmf:
    http_threads_count: 8
-@@ -238,3 +259,6 @@
+@@ -238,3 +258,6 @@
      pdu_session_type: "IPV4V6"
      ipv4_subnet: "10.0.255.0/24"
      ipv6_prefix: "2001:1:2::/64"

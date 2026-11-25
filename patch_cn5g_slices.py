@@ -105,20 +105,17 @@ def patch_config(text, a):
         "        enable_usage_reporting: no\n        enable_qers: yes\n"
         "    - host: 192.168.70.134\n      config:\n"
         "        enable_usage_reporting: no\n        enable_qers: yes\n", "smf upf enable_qers")
-    # UPF eBPF datapath: the only one that polices QERs (session AMBR); needs the N6 gateway (ext-dn)
-    text = replace_once(text, "    enable_bpf_datapath: no ",
-        "    enable_bpf_datapath: yes", "upf enable_bpf_datapath")
+    # Simple-switch UPF (the eBPF datapath is available but does not enforce AMBR correctly here, see
+    # REPORT-2026-11-25.md). No SNAT: ext-dn must see the UE source IPs to limit slice 2 with tc.
+    text = replace_once(text, "    enable_snat: yes ", "    enable_snat: no  ", "upf enable_snat")
     text = replace_once(text, "  remote_n6_gw: 127.0.0.1 ",
         "  remote_n6_gw: 192.168.70.195 ", "upf remote_n6_gw")
-    text = replace_once(text, "   # If \"on\": BPF is used as datapath else simpleswitch is used, DEFAULT= off\n",
-        "   # If \"on\": BPF is used as datapath else simpleswitch is used, DEFAULT= off\n"
-        "    enable_qos: yes            # eBPF datapath: enforce QERs (session AMBR)\n", "upf enable_qos")
     text = replace_once(text, "    n6:\n      interface_name: eth0\n", "    n6:\n      interface_name: eth1\n", "upf n6 interface")
     if not text.endswith("\n"):
         text += "\n"
     n = text.count("192.168.70.")
     text = text.replace("192.168.70.", f"192.168.{a.sub}.")
-    print(f"config: added slice 2 in 6 places + enable_qers + eBPF UPF, rewrote {n} occurrences of 192.168.70. (P-CSCF)")
+    print(f"config: added slice 2 in 6 places + enable_qers, no SNAT, rewrote {n} occurrences of 192.168.70. (P-CSCF)")
     return text
 
 
@@ -149,9 +146,9 @@ def verify(compose, config, a):
     # slice 1 untouched
     assert {"sst": 1} in k["amf"]["plmn_support_list"][0]["nssai"]
     assert any(d["dnn"] == "oai" and d["ipv4_subnet"] == "10.0.0.0/24" for d in k["dnns"])
-    assert k["upf"]["support_features"]["enable_bpf_datapath"] is True
+    assert k["upf"]["support_features"]["enable_bpf_datapath"] is False
+    assert k["upf"]["support_features"]["enable_snat"] is False
     assert k["upf"]["remote_n6_gw"] == f"192.168.{a.sub}.195"
-    assert k["upf"]["support_features"]["enable_qos"] is True
     assert k["nfs"]["upf"]["n6"]["interface_name"] == "eth1" and k["nfs"]["upf"]["n3"]["interface_name"] == "eth0"
     assert all(u["config"]["enable_qers"] is True for u in k["smf"]["upfs"])
     assert any(u["host"] == f"192.168.{a.sub}.134" for u in k["smf"]["upfs"])

@@ -33,6 +33,8 @@ export GNB_IP=192.168.$SUB.129         # host side of $BRIDGE; gNB NG/NGU
 export AMF_IP=192.168.$SUB.132
 export CN_SUBNET_N6=192.168.$SUB.192/26  # next /26 after the core subnet
 export UPF_N6_IP=192.168.$SUB.194
+export SLICE2_POOL=10.0.2.0/24         # UE pool of slice 2 (urllc), see patch_cn5g_slices.py
+export SLICE2_RATE=50mbit              # session AMBR of slice 2, enforced with tc in ext-dn (UPF does not police)
 export EXTDN_IP=192.168.$SUB.195       # ext-dn lives on the N6 network only
 
 # Per-UE names (i = 1..4); all <= 15 chars

@@ -210,9 +210,8 @@ smf:
 
 upf:
   support_features:
-    enable_bpf_datapath: yes   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_qos: yes            # eBPF datapath: enforce QERs (session AMBR)
-    enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
+    enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_snat: no            # If "on": Source natting is done for UE, DEFAULT= off
   remote_n6_gw: 192.168.77.195      # Dummy host since simple-switch does not use N6 GW
   smfs:
     - host: oai-smf            # To be used for PFCP association in case of no-NRF
