@@ -102,6 +102,14 @@ gnb_stop() { stop_pids $(ran_pids gnb.conf); tmux kill-session -t "$TAG-gnb" 2>/
 # that, everything runs unprivileged through that tmux server (socket $TAG-ue<i>).
 ut() { local i=$1; shift; tmux -L "$TAG-ue$i" "$@"; }
 
+n6_gro() {  # ROOT: enable NAPI on host-side veths of my N6 bridge so the UPF's XDP redirect can reach ext-dn
+  need_root n6-gro
+  local v
+  for v in $(ip -o link show master "$BRIDGE_N6" | awk -F': ' '{print $2}' | cut -d@ -f1); do
+    ethtool -K "$v" gro on >/dev/null && echo "gro on: $v (bridge $BRIDGE_N6)"
+  done
+}
+
 ue_ns_up() {
   local i=${1:?usage: ue-ns <i>}
   need_root ue-ns "$i"
@@ -188,21 +196,28 @@ ue_ip() {
 
 slice_if() { case "$1" in embb|1) echo ue-embb ;; urllc|2) echo ue-urllc ;; *) echo "slice must be embb|urllc" >&2; exit 2 ;; esac; }
 
-ping_() {  # ping <i> <embb|urllc> [count]
-  local i=${1:?usage: ping <i> <embb|urllc> [count]} ifc; ifc=$(slice_if "${2:?slice}")
-  in_ns "$i" "ping -c ${3:-10} -i 0.2 -I $ifc $EXTDN_IP"
+ping_() {  # ping <i> <embb|urllc> [count] [payload bytes, with DF set]
+  local i=${1:?usage: ping <i> <embb|urllc> [count] [size]} ifc sz=""; ifc=$(slice_if "${2:?slice}")
+  [ -n "${4:-}" ] && sz="-s $4 -M do"
+  in_ns "$i" "ping -c ${3:-10} -i 0.2 $sz -I $ifc $EXTDN_IP"
 }
 
-iperf_() {  # iperf <i> <embb|urllc> [seconds] -- downlink (-R), bound to the slice IP
-  local i=${1:?usage: iperf <i> <embb|urllc> [seconds]} ifc; ifc=$(slice_if "${2:?slice}")
+iperf_() {  # iperf <i> <embb|urllc> [seconds] [dl|ul] -- bound to the slice IP; dl = -R (default)
+  local i=${1:?usage: iperf <i> <embb|urllc> [seconds] [dl|ul]} ifc dir=${4:-dl} rev=-R
+  ifc=$(slice_if "${2:?slice}")
+  case $dir in dl) rev=-R ;; ul) rev= ;; *) echo "direction must be dl or ul" >&2; return 1 ;; esac
   in_ns "$i" "ip=\$(ip -4 -o addr show dev $ifc | awk '{print \$4}' | cut -d/ -f1); \
-echo \"bind \$ip ($ifc)\"; iperf3 -c $EXTDN_IP -B \$ip -R -t ${3:-10} -f m"
+echo \"bind \$ip ($ifc) $dir\"; timeout $(( ${3:-10} + 15 )) iperf3 -c $EXTDN_IP -B \$ip $rev -t ${3:-10} -f m"
 }
 
 # ---------------------------------------------------------------------- status
 status() {
   echo "== core ($PROJ)"; compose ps 2>/dev/null || true
-  echo "== network"; dk network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}} bridge={{index .Options "com.docker.network.bridge.name"}}' "$NETNAME" 2>/dev/null || echo "$NETNAME: absent"
+  echo "== network"
+  local nn
+  for nn in "$NETNAME" "$NETNAME_N6"; do
+    dk network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}} bridge={{index .Options "com.docker.network.bridge.name"}}' "$nn" 2>/dev/null || echo "$nn: absent"
+  done
   echo "== tmux"; tmux ls 2>/dev/null | grep "^$TAG-" || echo "no $TAG-* sessions (default socket)"
   local s
   for s in /tmp/tmux-"$(id -u "$LAB_USER")"/"$TAG"-ue*; do
@@ -244,11 +259,12 @@ usage: $0 <command>
   cn-up | cn-down        start (conflict check, pull missing, wait healthy) / remove my core
   cn-logs [svc] [n]      last n lines (default 200) of core logs; cn-logs -f follows in tmux
   gnb | gnb-stop         start/stop the gNB (tmux $TAG-gnb, log \$LAB/run/gnb/gnb.log)
+  n6-gro                 ROOT: GRO on my N6 bridge's veths (needed after every cn-up with the eBPF UPF)
   ue-ns <i>              ROOT: netns $TAG-ue<i> + veth + in-netns tmux server
   ue <i> | ue-stop <i>   start/stop UE i inside its netns (log \$LAB/run/ue<i>/ue.log)
   ue-ip [i]              interfaces and per-slice ip rules inside the UE netns
-  ping <i> <embb|urllc> [n]      ping ext-dn ($EXTDN_IP) through a slice
-  iperf <i> <embb|urllc> [secs]  iperf3 downlink from ext-dn bound to the slice IP
+  ping <i> <embb|urllc> [n] [size]      ping ext-dn ($EXTDN_IP) through a slice
+  iperf <i> <embb|urllc> [secs] [dl|ul]  iperf3 via ext-dn, bound to the slice IP (default dl)
   status                 what of mine is running
   stop                   stop UEs and gNB (core stays up)
   down                   stop everything of mine (netns removal: sudo ... ue-ns-down all)
@@ -265,6 +281,7 @@ case "$cmd" in
   gnb)        gnb ;;
   gnb-stop)   gnb_stop ;;
   ue-ns)      ue_ns_up "$@" ;;
+  n6-gro)     n6_gro ;;
   ue-ns-down) ue_ns_down "$@" ;;
   ue)         ue "$@" ;;
   ue-stop)    ue_stop "$@" ;;

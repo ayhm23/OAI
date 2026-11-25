@@ -39,27 +39,33 @@ port_users() {  # $1 = proto flag (t|u), $2 = port
 }
 is_my_pid() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -q "$LAB/conf/"; }
 
-check_cn() {
-  echo "== core: network $NETNAME, bridge $BRIDGE, subnet $CN_SUBNET, project $PROJ"
-  local line name subnets proj found=0
+# one docker network of mine: name, bridge, subnet must not clash with anything else
+check_net() {  # $1 = network name, $2 = bridge, $3 = subnet
+  local net=$1 br=$2 sn=$3 name subnets proj found=0 s line
+  echo "== core: network $net, bridge $br, subnet $sn, project $PROJ"
   while IFS='|' read -r name subnets proj; do
-    if [ "$name" = "$NETNAME" ]; then
+    if [ "$name" = "$net" ]; then
       found=1
-      [ "$proj" = "$PROJ" ] && ok "docker network $NETNAME exists and belongs to $PROJ" \
-                            || bad "docker network $NETNAME exists, owned by project '$proj'"
+      [ "$proj" = "$PROJ" ] && ok "docker network $net exists and belongs to $PROJ" \
+                            || bad "docker network $net exists, owned by project '$proj'"
       continue
     fi
     for s in $subnets; do
-      [ -n "$(echo "x $s" | overlapping "$CN_SUBNET")" ] && bad "docker network '$name' ($proj) uses $s"
+      [ -n "$(echo "x $s" | overlapping "$sn")" ] && bad "docker network '$name' ($proj) uses $s"
     done
   done < <(dk network inspect -f '{{.Name}}|{{range .IPAM.Config}}{{.Subnet}} {{end}}|{{index .Labels "com.docker.compose.project"}}' \
              $(dk network ls -q))
-  [ $found = 0 ] && ok "no docker network named $NETNAME yet"
-  while read -r line; do bad "kernel: $line overlaps $CN_SUBNET"; done < <(kernel_overlaps "$CN_SUBNET" "$BRIDGE")
-  if ip link show "$BRIDGE" >/dev/null 2>&1; then
-    [ $found = 1 ] && ok "bridge $BRIDGE exists (mine, from $NETNAME)" \
-                   || bad "interface $BRIDGE exists but no docker network $NETNAME: not mine?"
-  else ok "no interface named $BRIDGE yet"; fi
+  [ $found = 0 ] && ok "no docker network named $net yet"
+  while read -r line; do bad "kernel: $line overlaps $sn"; done < <(kernel_overlaps "$sn" "$br")
+  if ip link show "$br" >/dev/null 2>&1; then
+    [ $found = 1 ] && ok "bridge $br exists (mine, from $net)" \
+                   || bad "interface $br exists but no docker network $net: not mine?"
+  else ok "no interface named $br yet"; fi
+}
+
+check_cn() {
+  check_net "$NETNAME" "$BRIDGE" "$CN_SUBNET"
+  check_net "$NETNAME_N6" "$BRIDGE_N6" "$CN_SUBNET_N6"
   local n; n=$(dk ps -aq --filter "label=com.docker.compose.project=$PROJ" | wc -l)
   info "$n container(s) in project $PROJ"
 }

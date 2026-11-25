@@ -33,7 +33,24 @@ def patch_compose(text, a):
     print(f"compose: removed {n} container_name entries")
     text = replace_once(text, "name: oai-cn5g-public-net", f"name: {a.netname}", "network name")
     text = replace_once(text, 'com.docker.network.bridge.name: "oai-cn5g"',
-                        f'com.docker.network.bridge.name: "{a.bridge}"', "bridge name")
+                        f'com.docker.network.bridge.name: "{a.bridge}"\n'
+                        '            com.docker.network.driver.mtu: "1600"', "bridge name")  # N3 carries GTP-U (+~44 B); eBPF UPF can't fragment
+    # eBPF UPF needs N3 and N6 on separate interfaces: UPF eth0=N3/N4 (public_net), eth1=N6 (n6_net);
+    # ext-dn sits on n6_net only. (anchors still use the upstream 192.168.70.x text)
+    text = replace_once(text, "            public_net:\n                ipv4_address: 192.168.70.134\n",
+        "            public_net:\n                ipv4_address: 192.168.70.134\n                interface_name: eth0\n"
+        "            n6_net:\n                ipv4_address: 192.168.70.194\n                interface_name: eth1\n", "upf networks")
+    text = replace_once(text, "            public_net:\n                ipv4_address: 192.168.70.135\n",
+        "            n6_net:\n                ipv4_address: 192.168.70.195\n                interface_name: eth0\n", "ext-dn network")
+    text = replace_once(text, "via 192.168.70.134 dev eth0", "via 192.168.70.194 dev eth0", "ext-dn route")
+    # XDP-redirected frames lose partial TCP checksums: ext-dn must send fully checksummed packets
+    text = replace_once(text, '"ip route add 10.0.0.0/16', '"ethtool -K eth0 tx off tso off gso off; ip route add 10.0.0.0/16', "ext-dn tx offload")
+    if not text.endswith("\n"):
+        text += "\n"
+    text += ("    n6_net:\n        driver: bridge\n"
+             f"        name: {a.netname_n6}\n        ipam:\n            config:\n"
+             "                - subnet: 192.168.70.192/26\n        driver_opts:\n"
+             f'            com.docker.network.bridge.name: "{a.bridge_n6}"\n')
     n = text.count("192.168.70.")
     text = text.replace("192.168.70.", f"192.168.{a.sub}.")
     print(f"compose: rewrote {n} occurrences of 192.168.70. -> 192.168.{a.sub}.")
@@ -82,11 +99,26 @@ def patch_config(text, a):
         '    ipv4_subnet: "10.0.255.0/24"\n    ipv6_prefix: "2001:1:2::/64"\n'
         f'  - dnn: "{s["dnn"]}"\n    pdu_session_type: "IPV4"\n    ipv4_subnet: "{s["pool"]}"',
         "dnns")
+    # make the SMF send QERs (session AMBR) to the UPF in PFCP; default is No
+    text = replace_once(text,
+        "        enable_usage_reporting: no\n",
+        "        enable_usage_reporting: no\n        enable_qers: yes\n"
+        "    - host: 192.168.70.134\n      config:\n"
+        "        enable_usage_reporting: no\n        enable_qers: yes\n", "smf upf enable_qers")
+    # UPF eBPF datapath: the only one that polices QERs (session AMBR); needs the N6 gateway (ext-dn)
+    text = replace_once(text, "    enable_bpf_datapath: no ",
+        "    enable_bpf_datapath: yes", "upf enable_bpf_datapath")
+    text = replace_once(text, "  remote_n6_gw: 127.0.0.1 ",
+        "  remote_n6_gw: 192.168.70.195 ", "upf remote_n6_gw")
+    text = replace_once(text, "   # If \"on\": BPF is used as datapath else simpleswitch is used, DEFAULT= off\n",
+        "   # If \"on\": BPF is used as datapath else simpleswitch is used, DEFAULT= off\n"
+        "    enable_qos: yes            # eBPF datapath: enforce QERs (session AMBR)\n", "upf enable_qos")
+    text = replace_once(text, "    n6:\n      interface_name: eth0\n", "    n6:\n      interface_name: eth1\n", "upf n6 interface")
     if not text.endswith("\n"):
         text += "\n"
     n = text.count("192.168.70.")
     text = text.replace("192.168.70.", f"192.168.{a.sub}.")
-    print(f"config: added slice 2 in 6 places, rewrote {n} occurrences of 192.168.70. (P-CSCF)")
+    print(f"config: added slice 2 in 6 places + enable_qers + eBPF UPF, rewrote {n} occurrences of 192.168.70. (P-CSCF)")
     return text
 
 
@@ -98,6 +130,7 @@ def verify(compose, config, a):
     assert c["name"] == a.proj
     assert net["name"] == a.netname
     assert net["driver_opts"]["com.docker.network.bridge.name"] == a.bridge
+    assert net["driver_opts"]["com.docker.network.driver.mtu"] == "1600"
     assert net["ipam"]["config"][0]["subnet"] == f"192.168.{a.sub}.128/26"
     assert not any("container_name" in v for v in c["services"].values())
     for doc in (compose, config):
@@ -116,6 +149,12 @@ def verify(compose, config, a):
     # slice 1 untouched
     assert {"sst": 1} in k["amf"]["plmn_support_list"][0]["nssai"]
     assert any(d["dnn"] == "oai" and d["ipv4_subnet"] == "10.0.0.0/24" for d in k["dnns"])
+    assert k["upf"]["support_features"]["enable_bpf_datapath"] is True
+    assert k["upf"]["remote_n6_gw"] == f"192.168.{a.sub}.195"
+    assert k["upf"]["support_features"]["enable_qos"] is True
+    assert k["nfs"]["upf"]["n6"]["interface_name"] == "eth1" and k["nfs"]["upf"]["n3"]["interface_name"] == "eth0"
+    assert all(u["config"]["enable_qers"] is True for u in k["smf"]["upfs"])
+    assert any(u["host"] == f"192.168.{a.sub}.134" for u in k["smf"]["upfs"])
     assert k["smf"]["ims"]["pcscf_ipv4"] == f"192.168.{a.sub}.139"
     print("verify: both files parse as YAML; isolation + slice 1/2 checks passed")
 
@@ -127,9 +166,13 @@ def main():
     p.add_argument("--proj", required=True)
     p.add_argument("--netname", required=True)
     p.add_argument("--bridge", required=True)
+    p.add_argument("--netname-n6", required=True)
+    p.add_argument("--bridge-n6", required=True)
     a = p.parse_args()
     if len(a.bridge) > 15:
         sys.exit(f"bridge name {a.bridge} > 15 chars")
+    if len(a.bridge_n6) > 15:
+        sys.exit(f"bridge name {a.bridge_n6} > 15 chars")
     cf, kf = a.dir / "docker-compose.yaml", a.dir / "conf" / "config.yaml"
     compose = patch_compose(cf.read_text(), a)
     config = patch_config(kf.read_text(), a)

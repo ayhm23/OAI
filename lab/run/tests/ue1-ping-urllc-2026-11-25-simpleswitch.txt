@@ -1,0 +1,26 @@
+PING 192.168.77.135 (192.168.77.135) from 10.0.2.2 ue-urllc: 56(84) bytes of data.
+64 bytes from 192.168.77.135: icmp_seq=1 ttl=63 time=5.82 ms
+64 bytes from 192.168.77.135: icmp_seq=2 ttl=63 time=3.97 ms
+64 bytes from 192.168.77.135: icmp_seq=3 ttl=63 time=3.09 ms
+64 bytes from 192.168.77.135: icmp_seq=4 ttl=63 time=6.68 ms
+64 bytes from 192.168.77.135: icmp_seq=5 ttl=63 time=5.62 ms
+64 bytes from 192.168.77.135: icmp_seq=6 ttl=63 time=5.48 ms
+64 bytes from 192.168.77.135: icmp_seq=7 ttl=63 time=3.56 ms
+64 bytes from 192.168.77.135: icmp_seq=8 ttl=63 time=5.53 ms
+64 bytes from 192.168.77.135: icmp_seq=9 ttl=63 time=5.65 ms
+64 bytes from 192.168.77.135: icmp_seq=10 ttl=63 time=3.29 ms
+64 bytes from 192.168.77.135: icmp_seq=11 ttl=63 time=6.61 ms
+64 bytes from 192.168.77.135: icmp_seq=12 ttl=63 time=6.29 ms
+64 bytes from 192.168.77.135: icmp_seq=13 ttl=63 time=5.95 ms
+64 bytes from 192.168.77.135: icmp_seq=14 ttl=63 time=6.31 ms
+64 bytes from 192.168.77.135: icmp_seq=15 ttl=63 time=5.66 ms
+64 bytes from 192.168.77.135: icmp_seq=16 ttl=63 time=3.77 ms
+64 bytes from 192.168.77.135: icmp_seq=17 ttl=63 time=6.22 ms
+64 bytes from 192.168.77.135: icmp_seq=18 ttl=63 time=5.53 ms
+64 bytes from 192.168.77.135: icmp_seq=19 ttl=63 time=6.37 ms
+64 bytes from 192.168.77.135: icmp_seq=20 ttl=63 time=4.77 ms
+
+--- 192.168.77.135 ping statistics ---
+20 packets transmitted, 20 received, 0% packet loss, time 3813ms
+rtt min/avg/max/mdev = 3.092/5.307/6.676/1.121 ms
+rc=0

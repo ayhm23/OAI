@@ -92,7 +92,8 @@ cn5g() {
   mkdir -p "$LAB/cn5g"
   cp -r "$up"/{conf,database,healthscripts,docker-compose.yaml} "$LAB/cn5g/"
   python3 -I "$KIT/patch_cn5g_slices.py" "$LAB/cn5g" \
-    --sub "$SUB" --proj "$PROJ" --netname "$NETNAME" --bridge "$BRIDGE"
+    --sub "$SUB" --proj "$PROJ" --netname "$NETNAME" --bridge "$BRIDGE" \
+    --netname-n6 "$NETNAME_N6" --bridge-n6 "$BRIDGE_N6"
 }
 
 # RAN configs in $LAB/conf: gnb.conf from the tutorial's band-78 106-PRB file,

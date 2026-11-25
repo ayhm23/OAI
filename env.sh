@@ -16,6 +16,8 @@ export TAG=oailab77
 export PROJ=$TAG-cn                    # docker compose project
 export NETNAME=$TAG-net                # docker network name
 export BRIDGE=br-$TAG                  # linux bridge name (<=15 chars)
+export NETNAME_N6=$TAG-n6              # N6 docker network (UPF eth1 <-> ext-dn), needed by the eBPF UPF
+export BRIDGE_N6=br-${TAG}n6           # its bridge (<=15 chars)
 
 # Source tree
 export REPO_URL=https://github.com/duranta-project/openairinterface5g.git
@@ -29,7 +31,9 @@ export CPM_SOURCE_CACHE=$LAB/src/cpm-cache
 export CN_SUBNET=192.168.$SUB.128/26
 export GNB_IP=192.168.$SUB.129         # host side of $BRIDGE; gNB NG/NGU
 export AMF_IP=192.168.$SUB.132
-export EXTDN_IP=192.168.$SUB.135
+export CN_SUBNET_N6=192.168.$SUB.192/26  # next /26 after the core subnet
+export UPF_N6_IP=192.168.$SUB.194
+export EXTDN_IP=192.168.$SUB.195       # ext-dn lives on the N6 network only
 
 # Per-UE names (i = 1..4); all <= 15 chars
 ue_ns()      { echo "$TAG-ue$1"; }          # netns

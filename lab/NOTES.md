@@ -15,7 +15,7 @@ Kit (scripts): `/home/oai/Desktop/oai-lab-kit` — rules for future sessions in 
 | TAG / PROJ / NETNAME / BRIDGE | `oailab77` / `oailab77-cn` / `oailab77-net` / `br-oailab77` | TAG set explicitly, not from `$USER` |
 
 Derived: AMF 192.168.77.132, gNB NG/NGU 192.168.77.129 (host side of `br-oailab77`),
-ext-dn 192.168.77.135, UE i netns `oailab77-uei`, veth `voailab77hi` (host, 10.77.i.1) ↔
+ext-dn 192.168.77.195 (N6 network `oailab77-n6`, 192.168.77.192/26, bridge `br-oailab77n6`; UPF N6 .194), UE i netns `oailab77-uei`, veth `voailab77hi` (host, 10.77.i.1) ↔
 `voailab77ni` (netns, 10.77.i.2), tmux socket/session `oailab77-uei`.
 
 ## Versions
@@ -49,6 +49,7 @@ cd ~/Desktop/oai-lab-kit
 ./setup.sh cn5g && ./setup.sh conf       # core copy+patch, RAN configs
 # run
 ./lab.sh cn-up                           # 1. core (conflict check, pull missing images, wait healthy)
+sudo ./lab.sh n6-gro                     #    ROOT, after every cn-up: GRO on the N6 veths (eBPF UPF XDP redirect)
 ./lab.sh gnb                             # 2. gNB (tmux oailab77-gnb)
 sg sudo -c "sudo ./lab.sh ue-ns 1"       # 3. ROOT once per UE: netns+veth+in-netns tmux
 ./lab.sh ue 1                            # 4. UE inside its netns
@@ -112,13 +113,16 @@ Raw outputs: `~/oai-lab/run/tests/`. The large max values are the first packet(s
 advances "air time" only as fast as all participants process slots, so throughput scales with
 CPU, not radio — the 2-UE drop is expected. More cores in CPUS is the lever if needed.
 
-**Session AMBR 50 Mbit/s on slice 2 is NOT enforced** (328 Mbit/s measured). Evidence: the
-SMF logs `Session AMBR Uplink 50Mbps, Downlink 50Mbps` and sends it in NAS, but its PFCP
-session establishment contains only PDR/FAR, no QER; the UPF log has no QER/MBR at all;
-the gNB logs no AMBR handling. So with CN v2.2.1 + simple-switch UPF, AMBR is signalled,
-not policed. Options if enforcement matters (one at a time): (a) police 10.0.2.0/24 with
-`tc` inside *my* ext-dn/UPF container (non-3GPP shaping, but contained); (b) try a UPF
-datapath/implementation that implements QERs (e.g. a dedicated slice-2 UPF — see below).
+**Session AMBR 50 Mbit/s on slice 2 is NOT enforced.** (Correction of the 2026-10-28 note: it was not
+a CN-version limit.) The SMF had `enable_qers: No` (set it, and a second `smf.upfs` entry keyed by the UPF's
+IP, because the NRF-discovered UPF is matched by IP). Even with QERs sent, the simple-switch UPF does not
+police (DL 328 / UL 159 Mbit/s); only the UPF's eBPF datapath implements QER enforcement. That datapath
+runs after: N3/N6 on separate interfaces, GRO on the N6 host veths, N3 MTU 1600, ext-dn TX offload off,
+`enable_qos: yes`, but then still misbehaves (both session classes at 10 Gbit/s, DL ~1.2 Mbit/s in the
+UPF's default class, UL ~50 Mbit/s on both slices). Full story and raw numbers: `REPORT-2026-11-25.md`.
+
+**URLLC latency (~3-7 ms RTT) is expected**: eMBB radio config (TDD period 5 ms, 30 kHz SCS) and no RAN
+slicing in OAI; the 2026-10-28 "URLLC is faster" averages were warm-up noise (minimums both ~5 ms).
 
 ## Problems hit and fixes
 
